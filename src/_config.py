@@ -51,12 +51,12 @@ class Config:
                     'in_chans': 3,  # image channel, dlpfc is 1
                     'embed_dim': 256,  # embedding dim，p**2*channel
                     'embed_dim_out': 512,
-                    'depth': 5,  # number of transformer
+                    'depth': 6,  # number of transformer
                     'num_heads': 4,  # multi-head
                     'dim_head': 4,  # head dim in multi-head attention
                     'decoder_embed_dim': 256,  # positional embedding dim decided by patch
                     'mlp_ratio': 5,  # ratio between the hidden dimension and the embedded dimension
-                    'decoder_depth':5,
+                    'decoder_depth':6,
                     'decoder_num_heads':4,
                     'norm_pix_loss': False,  # wheather to normalize
                     'alpha': 0.8,  # alpha in DEC

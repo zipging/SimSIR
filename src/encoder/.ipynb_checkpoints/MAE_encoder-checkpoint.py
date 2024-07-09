@@ -15,6 +15,7 @@ from tqdm import tqdm
 import math
 from torchlars import LARS
 from timm.models.vision_transformer import PatchEmbed, Block
+import torch.distributed as dist
 
 '''
 MAE_encoder
@@ -569,10 +570,16 @@ class AutomaticWeightedLoss(nn.Module):
         return loss_sum
 
 def pretrain_mae(model, train_loader, batch_size, lr, pretrain_path):
-    cuda = torch.cuda.is_available()
-    device = torch.device("cuda:0" if cuda else "cpu")
+    if torch.cuda.device_count() > 1:
+            print(f"Let's use {torch.cuda.device_count()} GPUs!")
+    
+    model.cuda()  # 确保模型已移至 GPU
+    device_ids = [0, 1]
+    model = nn.DataParallel(model, device_ids=device_ids)
+    #cuda = torch.cuda.is_available()
+    #device = torch.device("cuda:0" if cuda else "cpu")
     batch_size = batch_size
-    epochs=50
+    epochs=100
     base_lr = 4.8
     final_lr = 0
     wd = 1e-6
@@ -584,7 +591,7 @@ def pretrain_mae(model, train_loader, batch_size, lr, pretrain_path):
     optimizer = torch.optim.SGD([
     {'params': model.parameters()},
     {'params': awl.parameters()}
-], lr=4.8, momentum=0.9, weight_decay=1e-6)
+], lr=2.4, momentum=0.9, weight_decay=1e-6)
     optimizer = LARS(optimizer=optimizer, trust_coef=0.001)
     warmup_lr_schedule = np.linspace(start_warm, base_lr, len(train_loader.loader1.dataset) * warm_epochs)
     iters = np.arange(len(train_loader.loader1.dataset) * (epochs - warm_epochs))
@@ -601,8 +608,8 @@ def pretrain_mae(model, train_loader, batch_size, lr, pretrain_path):
             iteration = epoch * len(train_loader.loader1.dataset) + it
             for param_group in optimizer.param_groups:
                 param_group["lr"] = lr_schedule[iteration]
-            q = q.to(device)
-            k = k.to(device)
+            q = q.cuda()
+            k = k.cuda()
             
             optimizer.zero_grad()
             
@@ -611,14 +618,14 @@ def pretrain_mae(model, train_loader, batch_size, lr, pretrain_path):
             
             caculate_clrloss = ContrastiveLoss(batch_size = len(q))
             contras_loss = caculate_clrloss(z1, z2)
-            contro_loss = loss2
+            contro_loss = loss1
             loss = awl(contro_loss,contras_loss)
 
-            total_loss += loss.item()
-            total_contras_loss += contras_loss.item()
-            total_contro_loss += contro_loss.item()
+            total_loss += loss.sum().item()
+            total_contras_loss += contras_loss.sum().item()
+            total_contro_loss += contro_loss.sum().item()
 
-            loss.backward()
+            loss.sum().backward()
             optimizer.step()
             it+=1
             
@@ -626,6 +633,6 @@ def pretrain_mae(model, train_loader, batch_size, lr, pretrain_path):
         print(f'rec_loss: {total_contro_loss / len(train_loader.loader1.dataset)}')
         print(f'contras loss: {total_contras_loss / len(train_loader.loader1.dataset)}')
         print(f'total_loss: {total_loss / len(train_loader.loader1.dataset)}')
-
-        torch.save(model.state_dict(), f"{pretrain_path}")
+        
+        torch.save(model.module.state_dict(), f"{pretrain_path}")
     print("model saved to {}.".format(f"{pretrain_path}"))

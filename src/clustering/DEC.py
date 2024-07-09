@@ -12,10 +12,13 @@ from torch.nn.parameter import Parameter
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from sklearn.mixture import GaussianMixture
-from SIR.src.main.LH import likelihood, regularization, size
 from torch.nn import Linear
 from torchlars import LARS
 from sklearn.preprocessing import StandardScaler
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, DistributedSampler
+
 
 
 def target_distribution(q):
@@ -23,12 +26,11 @@ def target_distribution(q):
     return (weight.t() / weight.sum(1)).t()
 
 def get_embedding(model, train_loader):
-    device = torch.device("cuda" if cuda else "cpu")
     z_part = []
     q_part = []
     with torch.no_grad():
         for (q, _), (k, _) in train_loader:
-            q = q.to(device)
+            q = q.cuda()
             _, batch_result_z, _, _, batch_result_q = model(q)
             z_part.append(batch_result_z)
             q_part.append(batch_result_q)
@@ -82,11 +84,16 @@ def cluster_acc(y_true, y_pred):
 
 
 def DEC(model, train_loader, config):
-    cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if cuda else "cpu")
+    
     batch_size = config['batch_size_dec']
     
     ####optimizer zetting####
+    epochs=100
+    base_lr = 4.8
+    final_lr = 0
+    wd = 1e-6
+    warm_epochs = 10
+    start_warm = 0
     awl = AutomaticWeightedLoss(3)
     optimizer = torch.optim.SGD([
     {'params': model.parameters()},

@@ -1,8 +1,6 @@
 import numpy as np
-from keras.datasets import mnist
 import torch
 from torch.utils.data import Dataset
-import tensorflow as tf
 
 
 def load_mnist(num):

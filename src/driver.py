@@ -1,4 +1,4 @@
-from SIR.src.main.encoder.MAE_encoder import MAE
+from SIR.src.encoder.MAE_encoder import MAE
 
 
 '''
